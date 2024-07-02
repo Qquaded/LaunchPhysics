@@ -1,92 +1,60 @@
---[[
+local RunService = game:GetService("RunService")
 
-__/\\\_______________________________________________________________________/\\\__________/\\\\\\\\\\\\\____/\\\_____________________________________________________________________        
- _\/\\\______________________________________________________________________\/\\\_________\/\\\/////////\\\_\/\\\_____________________________________________________________________       
-  _\/\\\______________________________________________________________________\/\\\_________\/\\\_______\/\\\_\/\\\____________/\\\__/\\\_______________/\\\____________________________      
-   _\/\\\______________/\\\\\\\\\_____/\\\____/\\\__/\\/\\\\\\_______/\\\\\\\\_\/\\\_________\/\\\\\\\\\\\\\/__\/\\\___________\//\\\/\\\___/\\\\\\\\\\_\///______/\\\\\\\\__/\\\\\\\\\\_     
-    _\/\\\_____________\////////\\\___\/\\\___\/\\\_\/\\\////\\\____/\\\//////__\/\\\\\\\\\\__\/\\\/////////____\/\\\\\\\\\\_____\//\\\\\___\/\\\//////___/\\\___/\\\//////__\/\\\//////__    
-     _\/\\\_______________/\\\\\\\\\\__\/\\\___\/\\\_\/\\\__\//\\\__/\\\_________\/\\\/////\\\_\/\\\_____________\/\\\/////\\\_____\//\\\____\/\\\\\\\\\\_\/\\\__/\\\_________\/\\\\\\\\\\_   
-      _\/\\\______________/\\\/////\\\__\/\\\___\/\\\_\/\\\___\/\\\_\//\\\________\/\\\___\/\\\_\/\\\_____________\/\\\___\/\\\__/\\_/\\\_____\////////\\\_\/\\\_\//\\\________\////////\\\_  
-       _\/\\\\\\\\\\\\\\\_\//\\\\\\\\/\\_\//\\\\\\\\\__\/\\\___\/\\\__\///\\\\\\\\_\/\\\___\/\\\_\/\\\_____________\/\\\___\/\\\_\//\\\\/_______/\\\\\\\\\\_\/\\\__\///\\\\\\\\__/\\\\\\\\\\_ 
-        _\///////////////___\////////\//___\/////////___\///____\///_____\////////__\///____\///__\///______________\///____\///___\////________\//////////__\///_____\////////__\//////////__
-
-		LaunchPhysics is a module library where you can have physics enabled or not, custom blocks, and launch models!
---]]
-
-local lp = {
-	["functions"] = {};
-	["core_lib"] = {
-		["Rocket"] = {
-			["Start"] = function(ins, model, core: Configuration)
-				local linearvel = Instance.new("VectorForce")
-				local attachment = Instance.new("Attachment")
-				
-				linearvel.Parent = ins
-				linearvel.Force = core:GetAttribute("Vector")
-				linearvel.Attachment0 = attachment
-				
-				attachment.Parent = ins
-			end,
+if RunService:IsServer() then
+	return {
+		Launch = function(Model: Model, callback)
+			local clone = Model:Clone()
+			clone.Name = Model.Name.."#"..math.random(1, 5000)
+			clone:SetAttribute("Pivot", Model:GetPivot())
+			clone.Parent = script
 			
-			["Stop"] = function(ins, model, core)
-				ins:WaitForChild("VectorForce"):Destroy()
-			end,
-		};
-	};
-}
-
-local HttpService = game:GetService("HttpService")
-
-local modelIDS = {}
-
-local function Loop(Table, Callback)
-	for i, v in ipairs(Table) do
-		Callback(i, v)
-	end
-end
-
--------------------------------------------------------------
-
-function lp.functions.Run(model: Model)
-	local center = nil
-	
-	Loop(model:GetDescendants(), function(num, ins)
-		if model:FindFirstChild("Center") then
-			center = model:WaitForChild("Center")
-		end
-		
-		if ins:IsA("BasePart") then
-			ins.Anchored = false
-		end
-		
-		if lp.core_lib[ins.Name] and ins:IsA("Configuration") then
-			lp.core_lib[ins.Name].Start(ins.Parent, model, ins)
-		end
-		
-		if center and ins:IsA("BasePart") and ins ~= center then
-			local weld = Instance.new("WeldConstraint")
-
-			weld.Parent = ins
-			weld.Part1 = ins
-			weld.Part0 = center
-		end
-	end)
-end
-
-function lp.functions.Stop(model: Model)
-	Loop(model:GetDescendants(), function(num, ins)
-		if ins:IsA("WeldConstraint") then
-			ins:Destroy()
-		elseif ins:IsA("Configuration") then
-			if lp.core_lib[ins.Name] then
-				lp.core_lib[ins.Name].Stop(ins.Parent, model, ins)
+			local center = Instance.new("Part")
+			center.Size = Vector3.new(1, 1, 1)
+			center.CanCollide = false
+			center.Transparency = 0.5
+			center.Color = Color3.new(1, 0, 0)
+			center.Position = Model:GetPivot().Position
+			center.Anchored = true
+			center.Parent = Model
+			
+			for i, part in pairs(Model:GetDescendants()) do
+				if part:IsA("Part") or part:IsA("MeshPart") and part ~= center then
+					part.Transparency = 1
+					
+					local weld = Instance.new("WeldConstraint")
+					weld.Part0 = part
+					weld.Part1 = center
+					weld.Parent = part
+					
+					if callback then
+						callback(part, weld)
+					end
+					
+					RunService.Heartbeat:Wait()
+					part.Transparency = 0
+					part.Anchored = false
+				end
 			end
-		end
+		end,
 		
-		if ins:IsA("BasePart") then
-			ins.Anchored = true
-		end
-	end)
-end
+		Stop = function(Model: Model)
+			local name = Model.Name
+			
+			Model:Destroy()
+			
+			for i, child in pairs(script:GetChildren()) do
+				if string.find(child.Name, name) then
+					if child:GetAttribute("Pivot") then
+						local cf = child:GetAttribute("Pivot")
 
-return lp
+						child:PivotTo(cf)
+						child.Name = name
+						child.Parent = workspace
+						
+						child:SetAttribute("Pivot", nil)
+					end
+				end
+			end
+		end,
+	}
+end
